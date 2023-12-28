@@ -1,15 +1,20 @@
 package speque.springframework.spring6restmvc.controller;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.annotation.Rollback;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.WebApplicationContext;
 import speque.springframework.spring6restmvc.entity.Beer;
 import speque.springframework.spring6restmvc.mapper.BeerMapper;
 import speque.springframework.spring6restmvc.model.BeerDTO;
+import speque.springframework.spring6restmvc.model.BeerStyle;
 import speque.springframework.spring6restmvc.repository.BeerRepository;
 
 import java.net.URI;
@@ -18,7 +23,11 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.core.Is.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 class BeerControllerIT {
@@ -26,9 +35,42 @@ class BeerControllerIT {
     BeerController beerController;
     @Autowired
     BeerRepository beerRepository;
-
     @Autowired
     BeerMapper beerMapper;
+    @Autowired
+    WebApplicationContext webApplicationContext;
+
+    MockMvc mockMvc;
+
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+    }
+
+    @Test
+    void testListBeersByNameAndStyle() throws Exception {
+        mockMvc.perform(get(BeerController.BEER_PATH)
+                        .queryParam("name", "IPA")
+                        .queryParam("style", BeerStyle.IPA.name()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size()", is(336)));
+    }
+
+    @Test
+    void testListBeersByName() throws Exception {
+        mockMvc.perform(get(BeerController.BEER_PATH)
+                        .queryParam("name", "IPA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size()", is(336)));
+    }
+    @Test
+    void testListBeersByStyle() throws Exception {
+        mockMvc.perform(get(BeerController.BEER_PATH)
+                        .queryParam("style", BeerStyle.IPA.name()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size()", is(548)));
+    }
 
     @Test
     @Transactional
@@ -79,28 +121,21 @@ class BeerControllerIT {
     @Test
     void testAddNewBeer(){
         BeerDTO dto = BeerDTO.builder().beerName("test name").build();
-
         ResponseEntity responseEntity = beerController.postBeer(dto);
-
         assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(201));
         URI location = responseEntity.getHeaders().getLocation();
         assertThat(location).isNotNull();
 
         String[] split = location.getPath().split("/");
-
-        UUID uuid = UUID.fromString(split[2]);
-
+        UUID uuid = UUID.fromString(split[4]);
         Beer beer = beerRepository.findById(uuid).get();
-
         assertThat(beer).isNotNull();
-
-
     }
 
     @Test
     void testListBeers() {
-        List<BeerDTO> dtos = beerController.getBeerList();
-        assertThat(dtos.size()).isEqualTo(3);
+        List<BeerDTO> dtos = beerController.getBeerList(null, null);
+        assertThat(dtos.size()).isEqualTo(2413);
     }
 
     @Rollback
@@ -108,7 +143,7 @@ class BeerControllerIT {
     @Test
     void testEmptyList() {
         beerRepository.deleteAll();
-        List<BeerDTO> dtos = beerController.getBeerList();
+        List<BeerDTO> dtos = beerController.getBeerList(null, null);
         assertThat(dtos.size()).isEqualTo(0);
     }
 
